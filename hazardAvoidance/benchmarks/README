@@ -1,0 +1,18 @@
+# Correctness Benchmark for EECS 583 HW2
+
+For the base part of HW2, you need to find and hoist ONLY the load instructions that depend on infrequent stores. After applying your pass, the modified program should generate the same output as the original program.
+The correctness of your pass will be evaluated using the following 6 tests, which are in increasing complexity:
+
+1. hw2correct1.c: There are no infrequent BBs. No instruction needs to be hoisted.
+
+2. hw2correct2.c: There is an infrequent BB with store-load dependency. One load needs to be hoisted.
+
+3. hw2correct3.c: There is an infrequent BB with store-load dependency. However, the load is also dependent on a store in a frequent BB. No instruction needs to be hoisted.
+
+4. hw2correct4.c: There are multiple infrequent BBs with store(many)-load(one) dependencies. Hoist a single load, but perform the fixup in all places.
+
+5. hw2correct5.c: There is an infrequent BB with store-load(many) dependency. Two loads need to be hoisted and fixup needs to be done.
+
+6. hw2correct6.c: There are multiple infrequent BBs with store-load dependencies. Two loads need to be hoisted and fixup needs to be done.
+
+[BONUS PART] Once the load instructions are hoisted, more dependent instructions can become invariant on the frequent path. Try to find and hoist all of them!
