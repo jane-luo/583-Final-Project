@@ -6,3 +6,6 @@ benchmarks/security
 benchmarks/telecomm
 
 build
+
+.DS_Store
+._.DS_Store
