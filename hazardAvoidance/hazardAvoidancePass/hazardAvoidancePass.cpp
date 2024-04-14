@@ -19,71 +19,64 @@
 using namespace llvm;
 
 namespace {
+  struct hazardAvoidancePass : public PassInfoMixin<hazardAvoidancePass> {
+    // std::set<BasicBlock*> ambiguousStoreBlocks;
 
-struct hazardAvoidancePass : public PassInfoMixin<hazardAvoidancePass> {
-  std::set<BasicBlock*> ambiguousStoreBlocks;
+    // // maybe check if any of a blocks successors have ambiguous stores?
+    // // then those can be avoided
+    // void containsAmbiguousStore(Function &F) {
+    //   for (BasicBlock &BB : F) {
+    //     for (Instruction &I : BB) {
+    //       if (std::string(I.getOpcodeName()) == "store") {
+    //         StoreInst* store = dyn_cast<StoreInst>(&I);
+    //         if (!isa<Constant>(store->getPointerOperand())) {
+    //           errs() << "ambiguous store found" << BB << "\n\n";
+    //           errs() << *store << "\n\n";
+    //           ambiguousStoreBlocks.insert(&BB);
+    //           break;
+    //         }
+    //       }
+    //     }
+    //   }
+    // }
 
-  // maybe check if any of a blocks successors have ambiguous stores?
-  // then those can be avoided
-  void containsAmbiguousStore(Function &F) {
-    for (BasicBlock &BB : F) {
-      for (Instruction &I : BB) {
-        if (std::string(I.getOpcodeName()) == "store") {
-          StoreInst* store = dyn_cast<StoreInst>(&I);
-          if (!isa<Constant>(store->getPointerOperand())) {
-            errs() << "ambiguous store found" << BB << "\n\n";
-            errs() << *store << "\n\n";
-            ambiguousStoreBlocks.insert(&BB);
+    PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
+      std::unordered_set<BasicBlock*> SuperBlockBB;
+
+      for (BasicBlock &BB : F) {
+        bool goodBB = true;
+
+        for (Instruction &I : BB) {
+
+          if (auto *Call = dyn_cast<CallInst>(&I)){
+            goodBB = false;
             break;
+            //errs() << "This basic block contains an I/O or function call or function return\n";
+          }
+          else if (auto *Load = dyn_cast<LoadInst>(&I)){
+            Type *OpType = Load->getPointerOperandType();
+            if (OpType->isPointerTy()){
+              Value *OpValue = Load->getPointerOperand();
+              if (auto *OpInst = dyn_cast<Instruction>(OpValue)){
+                if (isa<CallInst>(OpInst)){
+                    goodBB = false;
+                    break;
+                    //errs() << "This basic block contains an I/O or function return\n";
+                }
+              }
+
+            }
           }
         }
+
+        if (goodBB){
+          SuperBlockBB.insert(&BB);
+        }
       }
+      return PreservedAnalyses::all();
     }
-  }
-
-  std::unordered_set<BasicBlock*> SuperBlockBB;
-
-  for (BasicBlock &BB : F) {
-      bool goodBB = true;
-
-      for (Instruction &I : BB) {
-
-        if (auto *Call = dyn_cast<CallInst>(&I)){
-              goodBB = false;
-              break;
-              //errs() << "This basic block contains an I/O or function call or function return\n";
-        }
-        else if (auto *Load = dyn_cast<LoadInst>(&I)){
-              Type *OpType = Load->getPointerOperandType();
-              if (OpType->isPointerTy()){
-                  Value *OpValue = Load->getPointerOperand();
-                  if (auto *OpInst = dyn_cast<Instruction>(OpValue)){
-                      if (isa<CallInst>(OpInst)){
-                          goodBB = false;
-                          break;
-                          //errs() << "This basic block contains an I/O or function return\n";
-                      }
-                  }
-
-              }
-        }
-      }
-
-      if (goodBB){
-        SuperBlockBB.insert(&BB);
-      }
-  }
-
-//   PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
-//     std::cout << "Hello function: " << F.getName().str() << std::endl;
-//     containsAmbiguousStore(F);
-//     for (auto a : ambiguousStoreBlocks) {
-//       errs() << a << "\n";
-//     }
-    return PreservedAnalyses::all();
-  }
+  };
 };
-}
 
 extern "C" ::llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK llvmGetPassPluginInfo() {
   return {
