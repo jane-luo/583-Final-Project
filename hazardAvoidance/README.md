@@ -1,4 +1,8 @@
 # 583-Final-Project
 
-Run the following command to test if the pass works:
-*sh makeandrun.sh*
+1. Create a build folder and run `cmake ..` inside it.
+
+2. Run `sh makeandrun.sh` to test if the pass works.
+
+3. *benchmarks/dot* folder contains cfg outputs.
+
