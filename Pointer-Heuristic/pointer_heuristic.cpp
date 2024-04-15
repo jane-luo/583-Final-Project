@@ -1,7 +1,9 @@
-int pointerHeuristic(BranchInst* BI) {
+int pointerHeuristic(BranchInst* BI, unsigned int bitpos) {
     // Ensure the branch is conditional
     if (!BI || !BI->isConditional())
         return 0;
+	
+	if (bitpos > NUM_PATH_HEURISTICS) return 0;
 
     Value* cond = BI->getCondition();
     
@@ -18,7 +20,7 @@ int pointerHeuristic(BranchInst* BI) {
                     return 0;
                 case ICmpInst::ICMP_NE:
                     // Pointers are expected to be not equal, so return 1
-                    return 1;  // Encode as '1' indicating more likely
+                    return 1 << bitpos;  // Encode as '1' indicating more likely
                 default:
                     // For other pointer comparisons, default to a neutral expectation
                     return 0;

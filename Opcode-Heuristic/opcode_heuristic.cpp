@@ -1,6 +1,8 @@
-int opcodeHeuristic(BranchInst* BI) {
+int opcodeHeuristic(BranchInst* BI, unsigned int bitpos) {
     if (!BI || !BI->isConditional())
         return 0;
+	
+	if (bitpos > NUM_PATH_HEURISTICS) return 0;
 
     Value* cond = BI->getCondition();
 
@@ -35,5 +37,5 @@ int opcodeHeuristic(BranchInst* BI) {
         }
     }
 
-    return 1;  // Default to more likely for all other conditions
+    return 1 << bitpos;  // Default to more likely for all other conditions
 }
