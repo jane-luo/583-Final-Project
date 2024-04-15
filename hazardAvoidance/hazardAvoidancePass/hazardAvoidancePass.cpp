@@ -11,7 +11,7 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
-
+#include "llvm/IR/MDBuilder.h"
 #include <iostream>
 #include <unordered_set>
 #include <set>
@@ -39,14 +39,61 @@ namespace {
     //     }
     //   }
     // }
+    void loopHeuristic(BranchInst* BI, int bitpos, llvm::LoopAnalysis::Result &li, std::vector<int> arr) {
+      int i = 0;
+      for (BasicBlock* suc : successors(BI)) {
+        if (li.getLoopFor(suc)) {
+          arr[i] = 1;
+        }
+        i++;
+      }
+    }
 
     PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
       std::unordered_set<BasicBlock*> SuperBlockBB;
-
+      llvm::LoopAnalysis::Result &li = FAM.getResult<LoopAnalysis>(F);
       for (BasicBlock &BB : F) {
         bool goodBB = true;
-
         for (Instruction &I : BB) {
+          const char * name  = I.getOpcodeName();
+          std::string n(name);
+          if (name == "br" || n == "switch" || n == "indirectbr"){
+              BranchInst *BI = dyn_cast<BranchInst>(&I);
+              MDNode *Weights = BI->getMetadata(LLVMContext::MD_prof);
+              MDBuilder MDB(F.getContext());
+              unsigned l = I.getNumSuccessors();
+              std::vector<int> loopHeurisitcArray(l, 0);
+              std::vector<int> pointerHeurisitcArray(l, 0);
+              std::vector<int> opcodeHeurisitcArray(l, 0);
+              std::vector<int> guardHeurisitcArray(l, 0);
+              std::vector<int> branchHeurisitcArray(l, 0);
+              std::vector<std::vector<int>> heurisitcArrays = {branchHeurisitcArray, guardHeurisitcArray, opcodeHeurisitcArray, loopHeurisitcArray, pointerHeurisitcArray};
+              BranchInst *branchInst = dyn_cast<BranchInst>(&I);
+              loopHeuristic(branchInst, 4, li, loopHeurisitcArray);
+              // pointerHeurisitc();
+              // opcodeHeurisitc();
+              std::vector<int> weights(l, 0);
+              for (int i = 0; i < 5; i++) {
+                for (int j = 0; j < l; j++){
+                  if (heurisitcArrays[i][j] > 0){
+                      weights[j] += 1 << i;
+                  }
+                }
+              }
+              int chosen = -1;
+              int max = -1;
+              for (int i = 0; i < l; i++) {
+                if (weights[i] > max) {
+                  chosen = i;
+                  max = weights[i];
+                }
+              }
+              if (chosen != -1){
+                Weights = MDB.createBranchWeights(chosen, 10000); //just make it large i guess
+                BI->setMetadata(LLVMContext::MD_prof, Weights);
+              }
+
+          }
 
           if (auto *Call = dyn_cast<CallInst>(&I)){
             goodBB = false;
