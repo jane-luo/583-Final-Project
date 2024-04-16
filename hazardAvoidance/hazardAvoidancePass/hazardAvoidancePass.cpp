@@ -14,37 +14,101 @@
 
 #include <iostream>
 #include <unordered_set>
-#include <set>
 
 using namespace llvm;
 
+/*
+TO DO:
+- figure out how to combine heuristics fluidly
+- merging BBs together into superblocks by using the heuristics
+  - we check for a conditional branch and then run a heuristic function on the target blocks to detect hazard
+- also need to account for loops in function
+*/
+
 namespace {
   struct hazardAvoidancePass : public PassInfoMixin<hazardAvoidancePass> {
-    // std::set<BasicBlock*> ambiguousStoreBlocks;
+    // Checks whether a BB has an ambiguous store in it
+    bool containsAmbiguousStore(BasicBlock &BB) {
+      for (Instruction &I : BB) {
+        if (auto *SI = dyn_cast<StoreInst>(&I)) {
+          // If pointer operand doesn't have a constant value, it's ambiguous
+          if (!isa<Constant>(SI->getPointerOperand())) {
+            // errs() << "ambiguous store found: " << I << "\n";
+            return true;
+          }
+        }
+      }
+      return false;
+    }
 
-    // // maybe check if any of a blocks successors have ambiguous stores?
-    // // then those can be avoided
-    // void containsAmbiguousStore(Function &F) {
-    //   for (BasicBlock &BB : F) {
-    //     for (Instruction &I : BB) {
-    //       if (std::string(I.getOpcodeName()) == "store") {
-    //         StoreInst* store = dyn_cast<StoreInst>(&I);
-    //         if (!isa<Constant>(store->getPointerOperand())) {
-    //           errs() << "ambiguous store found" << BB << "\n\n";
-    //           errs() << *store << "\n\n";
-    //           ambiguousStoreBlocks.insert(&BB);
-    //           break;
-    //         }
-    //       }
-    //     }
-    //   }
-    // }
+    // Checks whether a BB has an instruction with an indirect jump
+    bool containsIndirectJump(BasicBlock &BB) {
+      for (Instruction &I : BB) {
+        // Indirect jump in branch
+        if (auto *IB = dyn_cast<IndirectBrInst>(&I)) {
+          // errs() << "indirect jump in branch: " << I << "\n";
+          return true;
+        }
+        // Indirect call
+        else if (auto *CI = dyn_cast<CallInst>(&I)) {
+          if (CI->isIndirectCall()) {
+            // errs() << "indirect call: " << I << "\n";
+            return true;
+          }
+        }
+      }
+      return false;
+    }
 
+    /*
+    //IN PROGRESS: Checks whether a BB contains synchronization instructions
+    bool containsSync(BasicBlock &BB) {
+
+      for (Instruction &I : BB) {
+        if (auto *CI = dyn_cast<CallInst>(&I)) {
+          Function *called = CI->getCalledFunction();
+
+          if (CI->getCalledFunction())
+        }
+        // Atomic swaps are no good
+
+        // Mutex locks have synchronization issues
+      }
+      return false;
+    }
+
+    PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
+      for (BasicBlock &BB : F) {
+        for (Instruction &I : BB) {
+          if (auto *branch = dyn_cast<BranchInst>(&I)) {
+            if (branch->isConditional()) {
+              auto *trueBlock = dyn_cast<BasicBlock>(branch->getOperand(2));
+              auto *falseBlock = dyn_cast<BasicBlock>(branch->getOperand(1));
+
+              // needs some logic handling here
+              // (if only one function returns false, then pick that one?)
+              // (also need to check for post dominator on the block that returns false)
+
+              // containsAmbiguousStore(*trueBlock);
+
+              // containsIndirectJump(*trueBlock);
+
+              containsSync(*trueBlock);
+            }
+          }
+        }
+      }
+      return PreservedAnalyses::all();
+    }
+    */
+
+    
     PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
       std::unordered_set<BasicBlock*> SuperBlockBB;
 
       for (BasicBlock &BB : F) {
         bool goodBB = true;
+        containsIndirectJump(BB);
 
         for (Instruction &I : BB) {
 
