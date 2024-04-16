@@ -55,7 +55,7 @@ namespace {
     bool containsIndirectJump(BasicBlock &BB) {
       for (Instruction &I : BB) {
         // Indirect jump in branch
-        if (auto *IB = dyn_cast<IndirectBrInst>(&I)) {
+        if (isa<IndirectBrInst>(&I)) {
           // errs() << "indirect jump in branch: " << I << "\n";
           return true;
         }
@@ -70,23 +70,32 @@ namespace {
       return false;
     }
 
-    //IN PROGRESS: Checks whether a BB contains synchronization instructions
-    // bool containsSync(BasicBlock &BB) {
-
-    //   for (Instruction &I : BB) {
-    //     if (auto *CI = dyn_cast<CallInst>(&I)) {
-    //       Function *called = CI->getCalledFunction();
-
-    //       if (CI->getCalledFunction())
-    //     }
-    //     // Atomic swaps are no good
-
-    //     // Mutex locks have synchronization issues
-    //   }
-    //   return false;
-    // }
+    // Checks whether a BB contains synchronization instructions
+    bool containsSync(BasicBlock &BB) {
+      for (Instruction &I : BB) {
+        if (auto *CI = dyn_cast<CallInst>(&I)) {
+          Function *called = CI->getCalledFunction();
+          if (called != nullptr) {
+            std::string functionName = std::string(called->getName());
+            if (functionName.find("pthread") != std::string::npos || 
+                functionName.find("mutex") != std::string::npos ||
+                functionName.find("lock") != std::string::npos) {
+              // errs() << "contains synchronization instruction\n"; 
+              return true;
+            }
+          }
+        }
+        // Atomic orderings/memory stuff are no good
+        else if (isa<AtomicCmpXchgInst>(&I) || isa<AtomicRMWInst>(&I) || isa<FenceInst>(&I)) {
+          // errs() << "contains atomic\n";
+          return true;
+        }
+      }
+      return false;
+    }
 
     // jane's scuffed setup function for testing and combining passes
+    /*
     PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
       llvm::PostDominatorTreeAnalysis::Result &PDT = FAM.getResult<PostDominatorTreeAnalysis>(F);
 
@@ -114,8 +123,8 @@ namespace {
       }
       return PreservedAnalyses::all();
     }
+    */
 
-    /*
     PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
       std::unordered_set<BasicBlock*> SuperBlockBB;
 
@@ -152,7 +161,6 @@ namespace {
       }
       return PreservedAnalyses::all();
     }
-    */
   };
 };
 
