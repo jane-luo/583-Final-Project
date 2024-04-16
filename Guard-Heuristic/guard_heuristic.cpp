@@ -1,3 +1,12 @@
+#include <iostream>
+#include <cassert>
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Value.h"
+#include "llvm/IR/IRBuilder.h"
+
+using namespace llvm;
+
 int guardHeuristic(BranchInst* BI, unsigned int bitpos) {
     // Ensure the branch is conditional
     if (!BI || !BI->isConditional())
