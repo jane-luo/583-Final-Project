@@ -17,3 +17,5 @@ opt -disable-output -load-pass-plugin="${PATH2LIB}" -passes="${PASS}" ${1}.bc
 # Generate CFG visualizations
 opt -disable-output -passes="dot-cfg" ${1}.bc
 cat .main.dot | dot -Tpdf > dot/main.pdf
+
+rm -f *.bc *.dot .*.dot

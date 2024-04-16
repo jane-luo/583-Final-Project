@@ -5,6 +5,7 @@
 #include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/BranchProbabilityInfo.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/PostDominators.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
@@ -27,6 +28,15 @@ TO DO:
 
 namespace {
   struct hazardAvoidancePass : public PassInfoMixin<hazardAvoidancePass> {
+    // Check if BB2 post dominates BB1
+    bool postDominates(PostDominatorTree &PDT, BasicBlock *BB1, BasicBlock *BB2) {
+      if (PDT.dominates(BB2, BB1)) {
+        errs() << *BB2 << " dominates " << *BB1 << "\n";
+        return true;
+      }
+      return false;
+    }
+
     // Checks whether a BB has an ambiguous store in it
     bool containsAmbiguousStore(BasicBlock &BB) {
       for (Instruction &I : BB) {
@@ -60,24 +70,26 @@ namespace {
       return false;
     }
 
-    /*
     //IN PROGRESS: Checks whether a BB contains synchronization instructions
-    bool containsSync(BasicBlock &BB) {
+    // bool containsSync(BasicBlock &BB) {
 
-      for (Instruction &I : BB) {
-        if (auto *CI = dyn_cast<CallInst>(&I)) {
-          Function *called = CI->getCalledFunction();
+    //   for (Instruction &I : BB) {
+    //     if (auto *CI = dyn_cast<CallInst>(&I)) {
+    //       Function *called = CI->getCalledFunction();
 
-          if (CI->getCalledFunction())
-        }
-        // Atomic swaps are no good
+    //       if (CI->getCalledFunction())
+    //     }
+    //     // Atomic swaps are no good
 
-        // Mutex locks have synchronization issues
-      }
-      return false;
-    }
+    //     // Mutex locks have synchronization issues
+    //   }
+    //   return false;
+    // }
 
+    // jane's scuffed setup function for testing and combining passes
     PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
+      llvm::PostDominatorTreeAnalysis::Result &PDT = FAM.getResult<PostDominatorTreeAnalysis>(F);
+
       for (BasicBlock &BB : F) {
         for (Instruction &I : BB) {
           if (auto *branch = dyn_cast<BranchInst>(&I)) {
@@ -90,19 +102,20 @@ namespace {
               // (also need to check for post dominator on the block that returns false)
 
               // containsAmbiguousStore(*trueBlock);
-
               // containsIndirectJump(*trueBlock);
-
-              containsSync(*trueBlock);
+              // containsSync(*trueBlock);
             }
           }
         }
+        // testing whether post dominator function works
+        // for (BasicBlock* suc : successors(&BB)) {
+        //   postDominates(PDT, &BB, suc);
+        // }
       }
       return PreservedAnalyses::all();
     }
-    */
 
-    
+    /*
     PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
       std::unordered_set<BasicBlock*> SuperBlockBB;
 
@@ -139,6 +152,7 @@ namespace {
       }
       return PreservedAnalyses::all();
     }
+    */
   };
 };
 
