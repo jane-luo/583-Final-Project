@@ -30,6 +30,6 @@ int branchDirectionHeuristic(BranchInst* BI, unsigned int bitpos) {
     } else if (direction.equals("forward")) {
         return 0;
     }
-
+    
     return 0;
 }
