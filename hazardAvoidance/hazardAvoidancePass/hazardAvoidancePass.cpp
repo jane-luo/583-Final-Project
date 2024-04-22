@@ -217,6 +217,67 @@ namespace {
             return 0;
         }
 
+        int branchDirectionHeuristic(BranchInst* BI) {
+            if (!BI || !BI->isConditional())
+                return 0;
+
+            // Get metadata
+            MDNode* branchMD = BI->getMetadata("BranchDirection");
+
+            if (!branchMD) return 0;
+
+            MDString* directionMD = dyn_cast<MDString>(branchMD->getOperand(0));
+            if (!directionMD) return 0;
+
+            StringRef direction = directionMD->getString();
+
+            if (direction.equals("backward")) {
+                // likely a loop back edge and should be taken
+                return 1;
+            } else if (direction.equals("forward")) {
+                return 0;
+            }
+            
+            return 0;
+        }
+
+        int guardHeuristic(BranchInst* BI) {
+            // Ensure the branch is conditional
+            if (!BI || !BI->isConditional())
+                return 0;
+
+            Value* cond = BI->getCondition();
+
+            // Check if comparison instruction
+            if (ICmpInst* icmp = dyn_cast<ICmpInst>(cond)) {
+                Value* lhs = icmp->getOperand(0);
+                Value* rhs = icmp->getOperand(1);
+
+                // Detecting if one of the operands is used immediately after the branch
+                for (auto user : lhs->users()) {
+                    if (Instruction* inst = dyn_cast<Instruction>(user)) {
+                        // binaryop and load (dereference) require LHS to be valid
+                        if (inst->isBinaryOp() || isa<LoadInst>(inst)) {
+                            // Check if the branch likely guards the use of LHS
+                            switch (icmp->getPredicate()) {
+                                case ICmpInst::ICMP_EQ:
+                                    // Expecting the condition to be false to use LHS
+                                    return 1;
+                                case ICmpInst::ICMP_NE:
+                                    // Expecting the condition to be true to use LHS
+                                    return 0;
+                                default:
+                                    return 0;
+                            }
+                        }
+                    }
+                }
+            }
+            return 0;
+        }
+
+
+
         void pathSelection(BasicBlock* BB, std::unordered_set<BasicBlock*>& hazardBlocks, std::vector<BasicBlock*>& finalPath, llvm::PostDominatorTreeAnalysis::Result& PDT){
             if (!BB) return;
 
@@ -254,6 +315,8 @@ namespace {
 
                         pathHeuristicCount += opcodeHeuristic(BI);
                         pathHeuristicCount += pointerHeuristic(BI);
+                        pathHeuristicCount += branchDirectionHeuristic(BI);
+                        pathHeuristicCount += guardHeuristic(BI);
 
                         if (pathHeuristicCount > 1){
                             errs() << "choosing likely path to ThenBlock.\n";
