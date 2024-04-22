@@ -133,17 +133,17 @@ namespace {
                         if (containsIOInstOrFunc(refBB) || containsAmbiguousStore(refBB)
                             || containsIndirectJump(refBB) || containsSync(refBB)) {
 
-                            if (!postDominates(PDT, BB, Successor)) {
-                                hazardBlocks.insert(Successor);
-                            }
+                            hazardBlocks.insert(Successor);
                         }
                     }
                 }
             }
 
             for (BasicBlock* Successor : successors(BB)) {
-                if (!SuperBlockBB.count(Successor) || !hazardBlocks.count(Successor)) {
-                    dfsBasicBlocks(Successor, SuperBlockBB, hazardBlocks, PDT);
+                if (!SuperBlockBB.count(Successor)) {
+                    if (!hazardBlocks.count(Successor) || postDominates(PDT, BB, Successor)) {
+                        dfsBasicBlocks(Successor, SuperBlockBB, hazardBlocks, PDT);
+                    }
                 }
             }
         }
