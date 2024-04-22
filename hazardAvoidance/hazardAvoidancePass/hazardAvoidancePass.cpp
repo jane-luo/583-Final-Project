@@ -148,6 +148,142 @@ namespace {
             }
         }
 
+        int opcodeHeuristic(BranchInst* BI) {
+            if (!BI || !BI->isConditional()) return 0;
+
+            Value* cond = BI->getCondition();
+
+            // Check for integer comparisons
+            if (ICmpInst* icmp = dyn_cast<ICmpInst>(cond)) {
+                switch (icmp->getPredicate()) {
+                    case ICmpInst::ICMP_SLT: // Signed less than
+                    case ICmpInst::ICMP_ULT: // Unsigned less than
+                        // Ensure that zero comparison is correctly checked regardless of operand order
+                        if (ConstantInt* CI = dyn_cast<ConstantInt>(icmp->getOperand(0))) {
+                            if (CI->isZero() && icmp->getOperand(1)->getType()->isIntegerTy())
+                                return 0;  // Less likely if comparing zero with an integer
+                        }
+                        if (ConstantInt* CI = dyn_cast<ConstantInt>(icmp->getOperand(1))) {
+                            if (CI->isZero())
+                                return 0;  // Less likely if comparing an integer with zero
+                        }
+                        break;
+                    default:
+                        break;  // No specific likelihood for other comparisons
+                }
+            }
+
+            // Check for floating point comparisons
+            if (FCmpInst* fcmp = dyn_cast<FCmpInst>(cond)) {
+                switch (fcmp->getPredicate()) {
+                    case FCmpInst::FCMP_OEQ: // Ordered equals
+                    case FCmpInst::FCMP_UEQ: // Unordered or equals
+                        return 0;  // Floating point equality is less likely
+                    default:
+                        break;  // No specific likelihood for other comparisons
+                }
+            }
+
+            return 1;  // Default to more likely for all other conditions
+        }
+
+        int pointerHeuristic(BranchInst* BI) {
+            // Ensure the branch is conditional
+            if (!BI || !BI->isConditional())
+                return 0;
+
+            Value* cond = BI->getCondition();
+            
+            // Check if the condition is an integer comparison instruction
+            if (ICmpInst* icmp = dyn_cast<ICmpInst>(cond)) {
+                // Check if operands are pointers
+                Value* lhs = icmp->getOperand(0);
+                Value* rhs = icmp->getOperand(1);
+                if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
+                    // Apply heuristic based on comparison type
+                    switch (icmp->getPredicate()) {
+                        case ICmpInst::ICMP_EQ:
+                            // Pointers are not expected to be equal, so return 0
+                            return 0;
+                        case ICmpInst::ICMP_NE:
+                            // Pointers are expected to be not equal, so return 1
+                            return 1;  // Encode as '1' indicating more likely
+                        default:
+                            // For other pointer comparisons, default to a neutral expectation
+                            return 0;
+                    }
+                }
+            }
+            return 0;
+        }
+
+        void pathSelection(BasicBlock* BB, std::unordered_set<BasicBlock*>& hazardBlocks, std::vector<BasicBlock*>& finalPath, llvm::PostDominatorTreeAnalysis::Result& PDT){
+            if (!BB) return;
+
+            int pathHeuristicCount = 0;
+            finalPath.push_back(BB);
+
+            for (Instruction& I : *BB) {
+                if (auto* BI = dyn_cast<BranchInst>(&I)) {
+                    if (BI->isConditional()){
+                        BasicBlock *thenBlock = BI->getSuccessor(0);
+                        BasicBlock *elseBlock = BI->getSuccessor(1);
+
+                        // check if successors are hazardous
+                        if (hazardBlocks.find(thenBlock) != hazardBlocks.end()) {
+                            if (hazardBlocks.find(elseBlock) != hazardBlocks.end()) {
+                                // !thenBlock && !elseBlock
+                                return;
+                            } else {
+                                // !thenBlock, skip heuristic check and go to elseBlock
+                                if (PDT.dominates(elseBlock, BB)){
+                                    pathSelection(elseBlock, hazardBlocks, finalPath, PDT);
+                                }
+                            }
+                        } else {
+                            if (hazardBlocks.find(elseBlock) != hazardBlocks.end()) {
+                                // !elseBlock, skip heuristic check and go to thenBlock
+                                if (PDT.dominates(thenBlock, BB)){
+                                    pathSelection(thenBlock, hazardBlocks, finalPath, PDT);
+                                }
+                            } else {
+                                // both are safe, go to heuristic checks below
+                                break;
+                            }
+                        }
+
+                        pathHeuristicCount += opcodeHeuristic(BI);
+                        pathHeuristicCount += pointerHeuristic(BI);
+
+                        if (pathHeuristicCount > 1){
+                            errs() << "choosing likely path to ThenBlock.\n";
+                            finalPath.push_back(thenBlock);
+                            // recurse to follow path
+                            if (PDT.dominates(thenBlock, BB)){
+                                pathSelection(thenBlock, hazardBlocks, finalPath, PDT);
+                            }
+                        } else{
+                            errs() << "choosing unlikely path to ElseBlock.\n";
+                            finalPath.push_back(elseBlock);
+                            // recurse to follow path
+                            if (PDT.dominates(elseBlock, BB)){
+                                pathSelection(elseBlock, hazardBlocks, finalPath, PDT);
+                            }
+                        }
+                    } else{
+                        // unconditional branches, simply add to path
+                        BasicBlock* nextBB = BI->getSuccessor(0);
+                        errs() << "unconditional branch to next block \n";
+                        if (PDT.dominates(nextBB, BB)) {
+                            pathSelection(nextBB, hazardBlocks, finalPath, PDT);
+                        }
+                    }
+                }
+            }
+
+            
+        }
+
         PreservedAnalyses run(Function& F, FunctionAnalysisManager& FAM) {
             llvm::PostDominatorTreeAnalysis::Result& PDT = FAM.getResult<PostDominatorTreeAnalysis>(F);
 
@@ -156,6 +292,13 @@ namespace {
 
             BasicBlock* BB = &F.front();
             dfsBasicBlocks(BB, SuperBlockBB, hazardBlocks, PDT);
+
+            std::vector<BasicBlock*> finalPath;
+            pathSelection(BB, hazardBlocks, finalPath, PDT);
+
+            errs() << "size of hazardBlocks " << hazardBlocks.size() << "\n";
+            errs() << "size of finalPath " << finalPath.size() << "\n";
+            // std::cout << "size of superBlockBB " << SuperBlockBB.size() << std::endl;
 
             return PreservedAnalyses::all();
         }
