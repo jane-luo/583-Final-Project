@@ -374,6 +374,10 @@ namespace {
 
             errs() << "size of hazardBlocks " << hazardBlocks.size() << "\n";
             errs() << "size of finalPath " << finalPath.size() << "\n";
+            for (auto block : finalPath) {
+                block->printAsOperand(errs(), false);
+                errs() << "\n";
+            }
             // std::cout << "size of superBlockBB " << SuperBlockBB.size() << std::endl;
 
             return PreservedAnalyses::all();

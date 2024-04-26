@@ -12,3 +12,4 @@ build
 .dot
 .*.dot
 *.pdf
+.vscode
