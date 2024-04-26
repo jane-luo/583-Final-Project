@@ -291,14 +291,12 @@ namespace {
         }
 
 
-        void pathSelection(BasicBlock* BB, std::unordered_set<BasicBlock*>& hazardBlocks, std::vector<BasicBlock*>& finalPath, llvm::PostDominatorTreeAnalysis::Result& PDT, llvm::LoopAnalysis::Result &li){
+        void pathSelection(BasicBlock* BB, std::unordered_set<BasicBlock*>& hazardBlocks, std::set<BasicBlock*>& finalPath, llvm::PostDominatorTreeAnalysis::Result& PDT, llvm::LoopAnalysis::Result &li){
             if (!BB) return;
 
-            // leave possible repeated block
-            if finalPath.find(BB) return;
-
             int pathHeuristicCount = 0;
-            finalPath.push_back(BB);
+            // finalPath.push_back(BB);
+            finalPath.insert(BB);
 
             for (Instruction& I : *BB) {
                 if (auto* BI = dyn_cast<BranchInst>(&I)) {
@@ -337,14 +335,16 @@ namespace {
 
                         if (pathHeuristicCount > 0){
                             errs() << "choosing likely path to ThenBlock.\n";
-                            finalPath.push_back(thenBlock);
+                            // finalPath.push_back(thenBlock);
+                            finalPath.insert(thenBlock);
                             // recurse to follow path
                             if (PDT.dominates(thenBlock, BB)){
                                 pathSelection(thenBlock, hazardBlocks, finalPath, PDT, li);
                             }
                         } else{
                             errs() << "choosing unlikely path to ElseBlock.\n";
-                            finalPath.push_back(elseBlock);
+                            // finalPath.push_back(elseBlock);
+                            finalPath.insert(elseBlock);
                             // recurse to follow path
                             if (PDT.dominates(elseBlock, BB)){
                                 pathSelection(elseBlock, hazardBlocks, finalPath, PDT, li);
@@ -372,7 +372,8 @@ namespace {
             BasicBlock* BB = &F.front();
             dfsBasicBlocks(BB, SuperBlockBB, hazardBlocks, PDT);
 
-            std::vector<BasicBlock*> finalPath;
+            // std::vector<BasicBlock*> finalPath;
+            std::set<BasicBlock*> finalPath;
             pathSelection(BB, hazardBlocks, finalPath, PDT, li);
 
             errs() << "size of hazardBlocks " << hazardBlocks.size() << "\n";
