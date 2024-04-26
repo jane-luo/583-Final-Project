@@ -294,6 +294,9 @@ namespace {
         void pathSelection(BasicBlock* BB, std::unordered_set<BasicBlock*>& hazardBlocks, std::vector<BasicBlock*>& finalPath, llvm::PostDominatorTreeAnalysis::Result& PDT, llvm::LoopAnalysis::Result &li){
             if (!BB) return;
 
+            // leave possible repeated block
+            if finalPath.find(BB) return;
+
             int pathHeuristicCount = 0;
             finalPath.push_back(BB);
 
