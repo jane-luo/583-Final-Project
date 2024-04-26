@@ -14,19 +14,10 @@
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
 
-
 #include <iostream>
 #include <unordered_set>
 
 using namespace llvm;
-
-/*
-TO DO:
-- figure out how to combine heuristics fluidly
-- merging BBs together into superblocks by using the heuristics
-  - we check for a conditional branch and then run a heuristic function on the target blocks to detect hazard
-- also need to account for loops in function
-*/
 
 namespace {
     struct combinedPass : public PassInfoMixin<combinedPass> {
@@ -366,8 +357,6 @@ namespace {
                     }
                 }
             }
-
-            
         }
 
         PreservedAnalyses run(Function& F, FunctionAnalysisManager& FAM) {
