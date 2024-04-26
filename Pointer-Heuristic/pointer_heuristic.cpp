@@ -1,3 +1,5 @@
+#include "pointer_heuristic.h"
+
 int pointerHeuristic(BranchInst* BI, unsigned int bitpos) {
     // Ensure the branch is conditional
     if (!BI || !BI->isConditional())

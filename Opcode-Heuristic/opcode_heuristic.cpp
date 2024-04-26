@@ -1,3 +1,5 @@
+#include "opcode_heuristic.h"
+
 int opcodeHeuristic(BranchInst* BI, unsigned int bitpos) {
     if (!BI || !BI->isConditional())
         return 0;

@@ -9,9 +9,11 @@
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/MDBuilder.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
+
 
 #include <iostream>
 #include <unordered_set>
@@ -161,11 +163,11 @@ namespace {
                         // Ensure that zero comparison is correctly checked regardless of operand order
                         if (ConstantInt* CI = dyn_cast<ConstantInt>(icmp->getOperand(0))) {
                             if (CI->isZero() && icmp->getOperand(1)->getType()->isIntegerTy())
-                                return 0;  // Less likely if comparing zero with an integer
+                                return -1;  // Less likely if comparing zero with an integer
                         }
                         if (ConstantInt* CI = dyn_cast<ConstantInt>(icmp->getOperand(1))) {
                             if (CI->isZero())
-                                return 0;  // Less likely if comparing an integer with zero
+                                return -1;  // Less likely if comparing an integer with zero
                         }
                         break;
                     default:
@@ -178,7 +180,7 @@ namespace {
                 switch (fcmp->getPredicate()) {
                     case FCmpInst::FCMP_OEQ: // Ordered equals
                     case FCmpInst::FCMP_UEQ: // Unordered or equals
-                        return 0;  // Floating point equality is less likely
+                        return -1;  // Floating point equality is less likely
                     default:
                         break;  // No specific likelihood for other comparisons
                 }
@@ -204,17 +206,17 @@ namespace {
                     switch (icmp->getPredicate()) {
                         case ICmpInst::ICMP_EQ:
                             // Pointers are not expected to be equal, so return 0
-                            return 0;
+                            return -1;
                         case ICmpInst::ICMP_NE:
                             // Pointers are expected to be not equal, so return 1
                             return 1;  // Encode as '1' indicating more likely
                         default:
                             // For other pointer comparisons, default to a neutral expectation
-                            return 0;
+                            return -1;
                     }
                 }
             }
-            return 0;
+            return -1;
         }
 
         int branchDirectionHeuristic(BranchInst* BI) {
@@ -224,10 +226,10 @@ namespace {
             // Get metadata
             MDNode* branchMD = BI->getMetadata("BranchDirection");
 
-            if (!branchMD) return 0;
+            if (!branchMD) return -1;
 
             MDString* directionMD = dyn_cast<MDString>(branchMD->getOperand(0));
-            if (!directionMD) return 0;
+            if (!directionMD) return -1;
 
             StringRef direction = directionMD->getString();
 
@@ -235,10 +237,10 @@ namespace {
                 // likely a loop back edge and should be taken
                 return 1;
             } else if (direction.equals("forward")) {
-                return 0;
+                return -1;
             }
             
-            return 0;
+            return -1;
         }
 
         int guardHeuristic(BranchInst* BI) {
@@ -265,20 +267,40 @@ namespace {
                                     return 1;
                                 case ICmpInst::ICMP_NE:
                                     // Expecting the condition to be true to use LHS
-                                    return 0;
+                                    return -1;
                                 default:
-                                    return 0;
+                                    return -1;
                             }
                         }
                     }
                 }
             }
+            return -1;
+        }
+
+        int loopHeuristic(BranchInst* BI, llvm::LoopAnalysis::Result &li) {
+            int then = 0;
+            int el = 0;
+            for (int i = 0, s = BI->getNumSuccessors(); i < 2; i++) {
+                BasicBlock* suc = BI->getSuccessor(i);
+                if (li.getLoopFor(suc) && i == 0){
+                then++;
+                }
+                if (li.getLoopFor(suc) && i == 1){
+                el++;
+                }
+            }
+            if (then > el){
+                return 1;
+            } 
+            if (then < el){
+                return -1;
+            }
             return 0;
         }
 
 
-
-        void pathSelection(BasicBlock* BB, std::unordered_set<BasicBlock*>& hazardBlocks, std::vector<BasicBlock*>& finalPath, llvm::PostDominatorTreeAnalysis::Result& PDT){
+        void pathSelection(BasicBlock* BB, std::unordered_set<BasicBlock*>& hazardBlocks, std::vector<BasicBlock*>& finalPath, llvm::PostDominatorTreeAnalysis::Result& PDT, llvm::LoopAnalysis::Result &li){
             if (!BB) return;
 
             int pathHeuristicCount = 0;
@@ -298,14 +320,14 @@ namespace {
                             } else {
                                 // !thenBlock, skip heuristic check and go to elseBlock
                                 if (PDT.dominates(elseBlock, BB)){
-                                    pathSelection(elseBlock, hazardBlocks, finalPath, PDT);
+                                    pathSelection(elseBlock, hazardBlocks, finalPath, PDT, li);
                                 }
                             }
                         } else {
                             if (hazardBlocks.find(elseBlock) != hazardBlocks.end()) {
                                 // !elseBlock, skip heuristic check and go to thenBlock
                                 if (PDT.dominates(thenBlock, BB)){
-                                    pathSelection(thenBlock, hazardBlocks, finalPath, PDT);
+                                    pathSelection(thenBlock, hazardBlocks, finalPath, PDT, li);
                                 }
                             } else {
                                 // both are safe, go to heuristic checks below
@@ -317,20 +339,21 @@ namespace {
                         pathHeuristicCount += pointerHeuristic(BI);
                         pathHeuristicCount += branchDirectionHeuristic(BI);
                         pathHeuristicCount += guardHeuristic(BI);
+                        pathHeuristicCount += loopHeuristic(BI, li);
 
-                        if (pathHeuristicCount > 1){
+                        if (pathHeuristicCount > 0){
                             errs() << "choosing likely path to ThenBlock.\n";
                             finalPath.push_back(thenBlock);
                             // recurse to follow path
                             if (PDT.dominates(thenBlock, BB)){
-                                pathSelection(thenBlock, hazardBlocks, finalPath, PDT);
+                                pathSelection(thenBlock, hazardBlocks, finalPath, PDT, li);
                             }
                         } else{
                             errs() << "choosing unlikely path to ElseBlock.\n";
                             finalPath.push_back(elseBlock);
                             // recurse to follow path
                             if (PDT.dominates(elseBlock, BB)){
-                                pathSelection(elseBlock, hazardBlocks, finalPath, PDT);
+                                pathSelection(elseBlock, hazardBlocks, finalPath, PDT, li);
                             }
                         }
                     } else{
@@ -338,7 +361,7 @@ namespace {
                         BasicBlock* nextBB = BI->getSuccessor(0);
                         errs() << "unconditional branch to next block \n";
                         if (PDT.dominates(nextBB, BB)) {
-                            pathSelection(nextBB, hazardBlocks, finalPath, PDT);
+                            pathSelection(nextBB, hazardBlocks, finalPath, PDT, li);
                         }
                     }
                 }
@@ -349,6 +372,7 @@ namespace {
 
         PreservedAnalyses run(Function& F, FunctionAnalysisManager& FAM) {
             llvm::PostDominatorTreeAnalysis::Result& PDT = FAM.getResult<PostDominatorTreeAnalysis>(F);
+            llvm::LoopAnalysis::Result &li = FAM.getResult<LoopAnalysis>(F);
 
             std::unordered_set<BasicBlock*> SuperBlockBB;
             std::unordered_set<BasicBlock*> hazardBlocks;
@@ -357,7 +381,7 @@ namespace {
             dfsBasicBlocks(BB, SuperBlockBB, hazardBlocks, PDT);
 
             std::vector<BasicBlock*> finalPath;
-            pathSelection(BB, hazardBlocks, finalPath, PDT);
+            pathSelection(BB, hazardBlocks, finalPath, PDT, li);
 
             errs() << "size of hazardBlocks " << hazardBlocks.size() << "\n";
             errs() << "size of finalPath " << finalPath.size() << "\n";
