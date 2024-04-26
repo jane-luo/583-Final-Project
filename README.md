@@ -1,3 +1,1 @@
-# 583-Final-Project
-
-We use [MiBench](https://github.com/embecosm/mibench) as our benchmark.
+run.sh should generate CFGs based on profile info but I think using the scripts from Hw would be better!
