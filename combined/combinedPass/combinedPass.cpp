@@ -272,13 +272,12 @@ namespace {
         int loopHeuristic(BranchInst* BI, llvm::LoopAnalysis::Result &li) {
             int then = 0;
             int el = 0;
-            for (int i = 0, s = BI->getNumSuccessors(); i < 2; i++) {
-                BasicBlock* suc = BI->getSuccessor(i);
-                if (li.getLoopFor(suc) && i == 0){
-                then++;
+            if (BI->getNumSuccessors() == 2){
+                if (li.getLoopFor(BI->getSuccessor(0))){
+                    then++;
                 }
-                if (li.getLoopFor(suc) && i == 1){
-                el++;
+                if (li.getLoopFor(BI->getSuccessor(1))){
+                    el++;
                 }
             }
             if (then > el){
