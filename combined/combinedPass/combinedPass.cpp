@@ -275,13 +275,12 @@ namespace {
         int loopHeuristic(BranchInst* BI, llvm::LoopAnalysis::Result &li) {
             int then = 0;
             int el = 0;
-            for (int i = 0, s = BI->getNumSuccessors(); i < 2; i++) {
-                BasicBlock* suc = BI->getSuccessor(i);
-                if (li.getLoopFor(suc) && i == 0){
-                then++;
+            if (BI->getNumSuccessors() == 2){
+                if (li.getLoopFor(BI->getSuccessor(0))){
+                    then++;
                 }
-                if (li.getLoopFor(suc) && i == 1){
-                el++;
+                if (li.getLoopFor(BI->getSuccessor(1))){
+                    el++;
                 }
             }
             if (then > el){
@@ -294,7 +293,7 @@ namespace {
         }
 
 
-        void pathSelection(BasicBlock* BB, std::unordered_set<BasicBlock*>& hazardBlocks, std::set<BasicBlock*>& finalPath, llvm::PostDominatorTreeAnalysis::Result& PDT, llvm::LoopAnalysis::Result &li){
+        void pathSelection(BasicBlock* BB, std::unordered_set<BasicBlock*>& SuperBlockBB, std::set<BasicBlock*>& finalPath, llvm::PostDominatorTreeAnalysis::Result& PDT, llvm::LoopAnalysis::Result &li){
             if (!BB) return;
 
             int pathHeuristicCount = 0;
@@ -308,25 +307,44 @@ namespace {
                         BasicBlock *elseBlock = BI->getSuccessor(1);
 
                         // check if successors are hazardous
-                        if (hazardBlocks.find(thenBlock) != hazardBlocks.end()) {
-                            if (hazardBlocks.find(elseBlock) != hazardBlocks.end()) {
-                                // !thenBlock && !elseBlock
-                                return;
+                        // if (hazardBlocks.find(thenBlock) != hazardBlocks.end()) {
+                        //     if (hazardBlocks.find(elseBlock) != hazardBlocks.end()) {
+                        //         // !thenBlock && !elseBlock
+                        //         return;
+                        //     } else {
+                        //         // !thenBlock, skip heuristic check and go to elseBlock
+                        //         if (PDT.dominates(elseBlock, BB)){
+                        //             pathSelection(elseBlock, hazardBlocks, finalPath, PDT, li);
+                        //         }
+                        //     }
+                        // } else {
+                        //     if (hazardBlocks.find(elseBlock) != hazardBlocks.end()) {
+                        //         // !elseBlock, skip heuristic check and go to thenBlock
+                        //         if (PDT.dominates(thenBlock, BB)){
+                        //             pathSelection(thenBlock, hazardBlocks, finalPath, PDT, li);
+                        //         }
+                        //     } else {
+                        //         // both are safe, go to heuristic checks below
+                        //         break;
+                        //     }
+                        // }
+
+                        // check if successors are hazard-less to be merged
+                        if (SuperBlockBB.find(thenBlock) == SuperBlockBB.end()){
+                            // thenBlock hazardous
+                            if (SuperBlockBB.find(elseBlock) == SuperBlockBB.end()){
+                                 // both hazardous
+                                 return;
                             } else {
-                                // !thenBlock, skip heuristic check and go to elseBlock
-                                if (PDT.dominates(elseBlock, BB)){
-                                    pathSelection(elseBlock, hazardBlocks, finalPath, PDT, li);
-                                }
+                                pathSelection(elseBlock, SuperBlockBB, finalPath, PDT, li);
                             }
                         } else {
-                            if (hazardBlocks.find(elseBlock) != hazardBlocks.end()) {
-                                // !elseBlock, skip heuristic check and go to thenBlock
-                                if (PDT.dominates(thenBlock, BB)){
-                                    pathSelection(thenBlock, hazardBlocks, finalPath, PDT, li);
-                                }
-                            } else {
-                                // both are safe, go to heuristic checks below
+                            if (SuperBlockBB.find(elseBlock) == SuperBlockBB.end()){
+                                // boat are safe, check path selection heuristics below
                                 break;
+                            } else{
+                                // elseBlock hazardous
+                                pathSelection(thenBlock, SuperBlockBB, finalPath, PDT, li);
                             }
                         }
 
@@ -342,7 +360,7 @@ namespace {
                             finalPath.insert(thenBlock);
                             // recurse to follow path
                             if (PDT.dominates(thenBlock, BB)){
-                                pathSelection(thenBlock, hazardBlocks, finalPath, PDT, li);
+                                pathSelection(thenBlock, SuperBlockBB, finalPath, PDT, li);
                             }
                         } else{
                             errs() << "choosing unlikely path to ElseBlock.\n";
@@ -350,7 +368,7 @@ namespace {
                             finalPath.insert(elseBlock);
                             // recurse to follow path
                             if (PDT.dominates(elseBlock, BB)){
-                                pathSelection(elseBlock, hazardBlocks, finalPath, PDT, li);
+                                pathSelection(elseBlock, SuperBlockBB, finalPath, PDT, li);
                             }
                         }
                     } else{
@@ -358,7 +376,7 @@ namespace {
                         BasicBlock* nextBB = BI->getSuccessor(0);
                         errs() << "unconditional branch to next block \n";
                         if (PDT.dominates(nextBB, BB)) {
-                            pathSelection(nextBB, hazardBlocks, finalPath, PDT, li);
+                            pathSelection(nextBB, SuperBlockBB, finalPath, PDT, li);
                         }
                     }
                 }
@@ -380,7 +398,8 @@ namespace {
 
             // std::vector<BasicBlock*> finalPath;
             std::set<BasicBlock*> finalPath;
-            pathSelection(BB, hazardBlocks, finalPath, PDT, li);
+            // pathSelection(BB, hazardBlocks, finalPath, PDT, li);
+            pathSelection(BB, SuperBlockBB, finalPath, PDT, li);
 
             errs() << "size of hazardBlocks " << hazardBlocks.size() << "\n";
             errs() << "size of finalPath " << finalPath.size() << "\n";
