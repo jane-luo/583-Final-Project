@@ -1,7 +1,7 @@
 #!/bin/bash
 
-PATH2LIB="../build/hazardAvoidancePass/hazardAvoidancePass.so"
-PASS="hazardAvoidance"
+PATH2LIB="../build/profileInfoPass/profileInfoPass.so"
+PASS="profileInfo"
 
 # Delete outputs from previous runs.
 rm -f *.bc *.dot .*.dot
@@ -16,6 +16,6 @@ opt -disable-output -load-pass-plugin="${PATH2LIB}" -passes="${PASS}" ${1}.bc
 
 # Generate CFG visualizations
 opt -disable-output -passes="dot-cfg" ${1}.bc
-cat .main.dot | dot -Tpdf > dot/main.pdf
+cat .main.dot | dot -Tpdf > ../dot/main.pdf
 
 rm -f *.bc *.dot .*.dot

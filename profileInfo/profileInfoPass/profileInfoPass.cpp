@@ -5,13 +5,21 @@
 #include "llvm/Analysis/BranchProbabilityInfo.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Timer.h"
+
+#include <iostream>
+#include <fstream>
+#include <iomanip>
 
 using namespace llvm;
 
 namespace {
 
-struct ProfInfoPass : public PassInfoMixin<ProfInfoPass> {
+struct profileInfoPass : public PassInfoMixin<profileInfoPass> {
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
+    llvm::Timer timer;
+    timer.startTimer();
+
     auto &bfi = FAM.getResult<BlockFrequencyAnalysis>(F);
     auto &bpi = FAM.getResult<BranchProbabilityAnalysis>(F);
 
@@ -22,6 +30,16 @@ struct ProfInfoPass : public PassInfoMixin<ProfInfoPass> {
       errs() << "BB Name: " << BB.getName() << ", Frequency: " << blockFreq << "\n";
     }
 
+    timer.stopTimer();
+    llvm::TimeRecord totalTime = timer.getTotalTime();
+    
+    std::ofstream outputFile;
+    outputFile.open("../profileOutput.txt", std::ios::out | std::ios::app);
+    
+    outputFile << std::fixed << std::setprecision(20);
+    outputFile << totalTime.getWallTime() << "\n";
+    outputFile.close();
+
     return PreservedAnalyses::all();
   }
 };
@@ -30,12 +48,12 @@ struct ProfInfoPass : public PassInfoMixin<ProfInfoPass> {
 
 extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo llvmGetPassPluginInfo() {
   return {
-    LLVM_PLUGIN_API_VERSION, "ProfInfoPass", "v0.1",
+    LLVM_PLUGIN_API_VERSION, "profileInfoPass", "v0.1",
     [](PassBuilder &PB) {
       PB.registerPipelineParsingCallback(
         [&](StringRef Name, FunctionPassManager &FPM, ArrayRef<PassBuilder::PipelineElement>) {
-          if (Name == "profinfo") {
-            FPM.addPass(ProfInfoPass());
+          if (Name == "profileInfo") {
+            FPM.addPass(profileInfoPass());
             return true;
           }
           return false;
