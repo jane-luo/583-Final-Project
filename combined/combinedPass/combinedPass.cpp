@@ -6,6 +6,7 @@
 #include "llvm/Analysis/BranchProbabilityInfo.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/PostDominators.h"
+#include "llvm/Analysis/DominatorTree.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
@@ -157,11 +158,11 @@ namespace {
                         // Ensure that zero comparison is correctly checked regardless of operand order
                         if (ConstantInt* CI = dyn_cast<ConstantInt>(icmp->getOperand(0))) {
                             if (CI->isZero() && icmp->getOperand(1)->getType()->isIntegerTy())
-                                return -1;  // Less likely if comparing zero with an integer
+                                return 0;  // Less likely if comparing zero with an integer
                         }
                         if (ConstantInt* CI = dyn_cast<ConstantInt>(icmp->getOperand(1))) {
                             if (CI->isZero())
-                                return -1;  // Less likely if comparing an integer with zero
+                                return 0;  // Less likely if comparing an integer with zero
                         }
                         break;
                     default:
@@ -174,7 +175,7 @@ namespace {
                 switch (fcmp->getPredicate()) {
                     case FCmpInst::FCMP_OEQ: // Ordered equals
                     case FCmpInst::FCMP_UEQ: // Unordered or equals
-                        return -1;  // Floating point equality is less likely
+                        return 0;  // Floating point equality is less likely
                     default:
                         break;  // No specific likelihood for other comparisons
                 }
@@ -200,17 +201,17 @@ namespace {
                     switch (icmp->getPredicate()) {
                         case ICmpInst::ICMP_EQ:
                             // Pointers are not expected to be equal, so return 0
-                            return -1;
+                            return 0;
                         case ICmpInst::ICMP_NE:
                             // Pointers are expected to be not equal, so return 1
                             return 1;  // Encode as '1' indicating more likely
                         default:
                             // For other pointer comparisons, default to a neutral expectation
-                            return -1;
+                            return 0;
                     }
                 }
             }
-            return -1;
+            return 0;
         }
 
         int branchDirectionHeuristic(BranchInst* BI) {
@@ -220,10 +221,10 @@ namespace {
             // Get metadata
             MDNode* branchMD = BI->getMetadata("BranchDirection");
 
-            if (!branchMD) return -1;
+            if (!branchMD) return 0;
 
             MDString* directionMD = dyn_cast<MDString>(branchMD->getOperand(0));
-            if (!directionMD) return -1;
+            if (!directionMD) return 0;
 
             StringRef direction = directionMD->getString();
 
@@ -231,10 +232,10 @@ namespace {
                 // likely a loop back edge and should be taken
                 return 1;
             } else if (direction.equals("forward")) {
-                return -1;
+                return 0;
             }
             
-            return -1;
+            return 0;
         }
 
         int guardHeuristic(BranchInst* BI) {
@@ -261,15 +262,15 @@ namespace {
                                     return 1;
                                 case ICmpInst::ICMP_NE:
                                     // Expecting the condition to be true to use LHS
-                                    return -1;
+                                    return 0;
                                 default:
-                                    return -1;
+                                    return 0;
                             }
                         }
                     }
                 }
             }
-            return -1;
+            return 0;
         }
 
         int loopHeuristic(BranchInst* BI, llvm::LoopAnalysis::Result &li) {
@@ -287,9 +288,9 @@ namespace {
                 return 1;
             } 
             if (then < el){
-                return -1;
+                return 0;
             }
-            return 0;
+            return -1;
         }
 
 
@@ -354,7 +355,8 @@ namespace {
                         pathHeuristicCount += guardHeuristic(BI);
                         pathHeuristicCount += loopHeuristic(BI, li);
 
-                        if (pathHeuristicCount > 0){
+                        // keeping finalPath just in case
+                        if (pathHeuristicCount > 2){
                             errs() << "choosing likely path to ThenBlock.\n";
                             // finalPath.push_back(thenBlock);
                             finalPath.insert(thenBlock);
@@ -383,6 +385,41 @@ namespace {
             }
         }
 
+        void updateBrProb(BasicBlock* BB, std::unordered_set<BasicBlock*>& hazardBlocks){
+            if (!BB) return;
+            if (hazardBlocks.find(BB) != hazardBlocks.end()) return;
+
+            int pathHeuristicCount = 0;
+            // finalPath.push_back(BB);
+            finalPath.insert(BB);
+
+            for (Instruction& I : *BB) {
+                if (auto* BI = dyn_cast<BranchInst>(&I)) {
+                    if (BI->isConditional()){
+                        BasicBlock *thenBlock = BI->getSuccessor(0);
+                        BasicBlock *elseBlock = BI->getSuccessor(1);
+
+                        pathHeuristicCount += opcodeHeuristic(BI);
+                        pathHeuristicCount += pointerHeuristic(BI);
+                        pathHeuristicCount += branchDirectionHeuristic(BI);
+                        pathHeuristicCount += guardHeuristic(BI);
+                        pathHeuristicCount += loopHeuristic(BI, li);
+
+                        // setting new weights based on heuristics
+                        llvm::MDBuilder MDB(Builder.getContext());
+                        llvm::MDNode* Weights = MDB.createBranchWeights(pathHeuristicCount * 20, (1 - pathHeuristicCount) * 20);
+                        BI->setMetadata(llvm::LLVMContext::MD_prof, Weights);
+                    }
+                }
+            }
+
+            // recurse on other BBs
+            for (BasicBlock* succBB : successors(BB)) {
+                updateBrProb(succBB, hazardBlocks);
+            }
+
+        }
+
         PreservedAnalyses run(Function& F, FunctionAnalysisManager& FAM) {
             llvm::Timer timer;
             timer.startTimer();
@@ -400,6 +437,9 @@ namespace {
             std::set<BasicBlock*> finalPath;
             // pathSelection(BB, hazardBlocks, finalPath, PDT, li);
             pathSelection(BB, SuperBlockBB, finalPath, PDT, li);
+
+            // update branch probabilities
+            updateBrProb(BB, PDT);
 
             errs() << "size of hazardBlocks " << hazardBlocks.size() << "\n";
             errs() << "size of finalPath " << finalPath.size() << "\n";
