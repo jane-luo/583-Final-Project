@@ -1,0 +1,5 @@
+digraph "CFG for 'B' function" {
+	label="CFG for 'B' function";
+
+	Node0x55606f5380a0 [shape=record,color="#b70d28ff", style=filled, fillcolor="#b70d2870",label="{%0:\l  %1 = call i32 (ptr, ...) @printf(ptr noundef @.str.1)\l  ret void\l}"];
+}

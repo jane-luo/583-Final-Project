@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TEST="test"
+TEST="eCalculate"
 
 cd "build"
 make
