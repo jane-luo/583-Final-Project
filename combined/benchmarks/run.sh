@@ -15,8 +15,6 @@ clang -emit-llvm -c ${1}.c -Xclang -disable-O0-optnone -o ${1}.bc
 # Apply LLVM passes to add static metadata
 opt -load-pass-plugin="${PATH2LIB}" -passes="${PASS}" ${1}.bc -o ${1}.static.bc
 
-opt -dot-cfg ${1}.static.bc
-
 # Generate binary executable
 clang ${1}.static.bc -o ${1}_static
 
@@ -28,8 +26,6 @@ echo -e "Performance of code with static metadata"
 time ./${1}_static > /dev/null
 # { time ./${1}_static ; } 2> ${OPTIMIZED}
 echo -e "\n\n"
-
-dot -Tpdf "cfg.main.dot" -o "${CFG_PDF}"
 
 # Cleanup: Remove this if you want to retain the created files. And you do need to.
 # rm -f default.profraw *_prof *_fplicm *.bc *.profdata *_output *.ll

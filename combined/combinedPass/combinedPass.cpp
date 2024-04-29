@@ -397,7 +397,7 @@ namespace {
             if (!BB) return;
             if (hazardBlocks.find(BB) != hazardBlocks.end()) return;
 
-            int pathHeuristicCount = 0;
+            int pathHeuristicCount;
             // finalPath.push_back(BB);
             finalPath.insert(BB);
 
@@ -407,11 +407,7 @@ namespace {
                         BasicBlock *thenBlock = BI->getSuccessor(0);
                         BasicBlock *elseBlock = BI->getSuccessor(1);
 
-                        pathHeuristicCount += opcodeHeuristic(BI);
-                        pathHeuristicCount += pointerHeuristic(BI);
-                        pathHeuristicCount += branchDirectionHeuristic(BI);
-                        pathHeuristicCount += guardHeuristic(BI);
-                        pathHeuristicCount += loopHeuristic(BI, li);
+                        pathHeuristicCount = opcodeHeuristic(BI) + pointerHeuristic(BI) + branchDirectionHeuristic(BI) + guardHeuristic(BI) + loopHeuristic(BI, li);
 
                         // setting new weights based on heuristics
                         LLVMContext &Context = F.getContext();
@@ -453,47 +449,38 @@ namespace {
             // pathSelection(BB, hazardBlocks, finalPath, PDT, li);
             pathSelection(BB, SuperBlockBB, finalPath, PDT, li);
 
-            // update branch probabilities
-            updateBrProb(F, BB, hazardBlocks, finalPath, li);
+            // // update branch probabilities
+            // updateBrProb(F, BB, hazardBlocks, finalPath, li);
 
 
-            // for (BasicBlock &BB : F) {
-            //     for (Instruction &I : BB) {
-            //         int pathHeuristicCount = 0;
-            //         if (auto* BI = dyn_cast<BranchInst>(&I)) {
-            //             if (BI->isConditional()){
-            //                 BasicBlock *thenBlock = BI->getSuccessor(0);
-            //                 BasicBlock *elseBlock = BI->getSuccessor(1);
+            for (BasicBlock &BB : F) {
+                for (Instruction &I : BB) {
+                    int pathHeuristicCount = 0;
+                    if (auto* BI = dyn_cast<BranchInst>(&I)) {
+                        if (BI->isConditional()){
+                            BasicBlock *thenBlock = BI->getSuccessor(0);
+                            BasicBlock *elseBlock = BI->getSuccessor(1);
 
-            //                 if (hazardBlocks.find(thenBlock) != hazardBlocks.end() && hazardBlocks.find(elseBlock) == hazardBlocks.end()) {
-            //                     pathHeuristicCount = 15;
-            //                 } else if (hazardBlocks.find(elseBlock) != hazardBlocks.end() && hazardBlocks.find(thenBlock) == hazardBlocks.end()) {
-            //                     pathHeuristicCount = 0;
-            //                 } else {
-            //                     pathHeuristicCount += opcodeHeuristic(BI);
-            //                     pathHeuristicCount += pointerHeuristic(BI);
-            //                     pathHeuristicCount += branchDirectionHeuristic(BI);
-            //                     pathHeuristicCount += guardHeuristic(BI);
-            //                     pathHeuristicCount += loopHeuristic(BI, li);
-            //                 }
+                            if (hazardBlocks.find(thenBlock) != hazardBlocks.end() && hazardBlocks.find(elseBlock) == hazardBlocks.end()) {
+                                pathHeuristicCount = 14.9;
+                            } else if (hazardBlocks.find(elseBlock) != hazardBlocks.end() && hazardBlocks.find(thenBlock) == hazardBlocks.end()) {
+                                pathHeuristicCount = 0.1;
+                            } else {
+                                pathHeuristicCount = opcodeHeuristic(BI) + pointerHeuristic(BI) + branchDirectionHeuristic(BI) + guardHeuristic(BI) + loopHeuristic(BI, li);
+                            }
 
-            //                 // setting new weights based on heuristics
-            //                 // llvm::MDBuilder MDB(Builder.getContext());
-            //                 // llvm::MDNode* Weights = MDB.createBranchWeights(pathHeuristicCount / 15 * 100, (1 - pathHeuristicCount) / 15 * 100);
-            //                 // BI->setMetadata(llvm::LLVMContext::MD_prof, Weights);
-
-            //                 errs() << "Branch weights for block: ";
-            //                 BB.printAsOperand(errs(), false);
-            //                 errs() << "\nThen Block: ";
-            //                 thenBlock->printAsOperand(errs(), false);
-            //                 errs() << ", Weight: " << " " << (pathHeuristicCount / 15.0) * 100 << "\n";
-            //                 errs() << "Else Block: ";
-            //                 elseBlock->printAsOperand(errs(), false);
-            //                 errs() << ", Weight: " << " " << (1 - (pathHeuristicCount / 15.0)) * 100 << "\n";
-            //             }
-            //         }
-            //     }
-            // }
+                            errs() << "Branch weights for block: ";
+                            BB.printAsOperand(errs(), false);
+                            errs() << "\nThen Block: ";
+                            thenBlock->printAsOperand(errs(), false);
+                            errs() << ", Weight: " << " " << (pathHeuristicCount / 15.0) * 100 << "\n";
+                            errs() << "Else Block: ";
+                            elseBlock->printAsOperand(errs(), false);
+                            errs() << ", Weight: " << " " << (1 - (pathHeuristicCount / 15.0)) * 100 << "\n";
+                        }
+                    }
+                }
+            }
 
             // errs() << "size of hazardBlocks " << hazardBlocks.size() << "\n";
             // for (auto block : hazardBlocks  ) {
