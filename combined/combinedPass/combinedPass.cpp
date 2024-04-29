@@ -14,12 +14,12 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/Timer.h"
+// #include "llvm/Support/Timer.h"
 
 #include <iostream>
-#include <fstream>
+// #include <fstream>
 #include <unordered_set>
-#include <iomanip>
+// #include <iomanip>
 
 using namespace llvm;
 
@@ -421,8 +421,8 @@ namespace {
         }
 
         PreservedAnalyses run(Function& F, FunctionAnalysisManager& FAM) {
-            llvm::Timer timer;
-            timer.startTimer();
+            // llvm::Timer timer;
+            // timer.startTimer();
 
             llvm::PostDominatorTreeAnalysis::Result& PDT = FAM.getResult<PostDominatorTreeAnalysis>(F);
             llvm::LoopAnalysis::Result &li = FAM.getResult<LoopAnalysis>(F);
@@ -449,15 +449,15 @@ namespace {
             }
             // std::cout << "size of superBlockBB " << SuperBlockBB.size() << std::endl;
 
-            timer.stopTimer();
-            llvm::TimeRecord totalTime = timer.getTotalTime();
+            // timer.stopTimer();
+            // llvm::TimeRecord totalTime = timer.getTotalTime();
             
-            std::ofstream outputFile;
-            outputFile.open("../staticOutput.txt", std::ios::out | std::ios::app);
+            // std::ofstream outputFile;
+            // outputFile.open("../staticOutput.txt", std::ios::out | std::ios::app);
             
-            outputFile << std::fixed << std::setprecision(20);
-            outputFile << totalTime.getWallTime() << "\n";
-            outputFile.close();
+            // outputFile << std::fixed << std::setprecision(20);
+            // outputFile << totalTime.getWallTime() << "\n";
+            // outputFile.close();
 
             return PreservedAnalyses::all();
         }
