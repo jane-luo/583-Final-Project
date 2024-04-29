@@ -6,7 +6,7 @@
 #include "llvm/Analysis/BranchProbabilityInfo.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/PostDominators.h"
-#include "llvm/Analysis/DominatorTree.h"
+// #include "llvm/Analysis/DominatorTree.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
@@ -19,6 +19,7 @@
 #include <iostream>
 // #include <fstream>
 #include <unordered_set>
+#include <set>
 // #include <iomanip>
 
 using namespace llvm;
@@ -40,7 +41,7 @@ namespace {
 
                 if (auto* Call = dyn_cast<CallInst>(&I)) {
                     return true;
-                    //errs() << "This basic block contains an I/O or function call or function return\n";
+                    // errs() << "This basic block contains an I/O or function call or function return\n";
                 }
                 else if (auto* Load = dyn_cast<LoadInst>(&I)) {
                     Type* OpType = Load->getPointerOperandType();
@@ -48,6 +49,8 @@ namespace {
                         Value* OpValue = Load->getPointerOperand();
                         if (auto* OpInst = dyn_cast<Instruction>(OpValue)) {
                             if (isa<CallInst>(OpInst)) {
+                                BB.printAsOperand(errs(), false);
+                                // errs() << "This basic block contains an I/O or function return\n";
                                 return true;
                                 //errs() << "This basic block contains an I/O or function return\n";
                             }
@@ -67,7 +70,8 @@ namespace {
                 if (auto* SI = dyn_cast<StoreInst>(&I)) {
                     // If pointer operand doesn't have a constant value, it's ambiguous
                     if (!isa<Constant>(SI->getPointerOperand())) {
-                        // errs() << "ambiguous store found: " << I << "\n";
+                        BB.printAsOperand(errs(), false);
+                        // errs() << "ambiguous store found" << "\n";
                         return true;
                     }
                 }
@@ -86,7 +90,8 @@ namespace {
                 // Indirect call
                 else if (auto* CI = dyn_cast<CallInst>(&I)) {
                     if (CI->isIndirectCall()) {
-                        // errs() << "indirect call: " << I << "\n";
+                        BB.printAsOperand(errs(), false);
+                        errs() << "indirect call: " << "\n";
                         return true;
                     }
                 }
@@ -111,6 +116,7 @@ namespace {
                 }
                 // Atomic orderings/memory stuff are no good
                 else if (isa<AtomicCmpXchgInst>(&I) || isa<AtomicRMWInst>(&I) || isa<FenceInst>(&I)) {
+                    BB.printAsOperand(errs(), false);
                     // errs() << "contains atomic\n";
                     return true;
                 }
@@ -119,7 +125,7 @@ namespace {
         }
 
         void dfsBasicBlocks(BasicBlock* BB, std::unordered_set<BasicBlock*>& SuperBlockBB, 
-                std::unordered_set<BasicBlock*>& hazardBlocks, llvm::PostDominatorTreeAnalysis::Result& PDT) {
+            std::unordered_set<BasicBlock*>& hazardBlocks, llvm::PostDominatorTreeAnalysis::Result& PDT) {
 
             SuperBlockBB.insert(BB);
             for (Instruction& I : *BB) {
@@ -386,7 +392,7 @@ namespace {
             }
         }
 
-        void updateBrProb(BasicBlock* BB, std::unordered_set<BasicBlock*>& hazardBlocks){
+        void updateBrProb(BasicBlock* BB, std::unordered_set<BasicBlock*>& hazardBlocks, std::set<BasicBlock*>& finalPath, llvm::LoopAnalysis::Result &li){
             if (!BB) return;
             if (hazardBlocks.find(BB) != hazardBlocks.end()) return;
 
@@ -407,33 +413,30 @@ namespace {
                         pathHeuristicCount += loopHeuristic(BI, li);
 
                         // setting new weights based on heuristics
-                        llvm::MDBuilder MDB(Builder.getContext());
-                        llvm::MDNode* Weights = MDB.createBranchWeights(pathHeuristicCount / 15 * 100, (1 - pathHeuristicCount) / 15 * 100);
-                        BI->setMetadata(llvm::LLVMContext::MD_prof, Weights);
+                        // llvm::MDBuilder MDB(Builder.getContext());
+                        // llvm::MDNode* Weights = MDB.createBranchWeights(pathHeuristicCount / 15 * 100, (1 - pathHeuristicCount) / 15 * 100);
+                        // BI->setMetadata(llvm::LLVMContext::MD_prof, Weights);
 
                         errs() << "Branch weights for block: ";
                         BB->printAsOperand(errs(), false);
                         errs() << "\nThen Block: ";
                         thenBlock->printAsOperand(errs(), false);
-                        errs() << ", Weight: " << pathHeuristicCount / 15 * 100 << "\n";
+                        errs() << ", Weight: " << pathHeuristicCount << " " << pathHeuristicCount / 15.0 * 100 << "\n";
                         errs() << "Else Block: ";
                         elseBlock->printAsOperand(errs(), false);
-                        errs() << ", Weight: " << (1 - pathHeuristicCount) / 15 * 100 << "\n";
+                        errs() << ", Weight: " << pathHeuristicCount << " " << (1 - (pathHeuristicCount / 15.0)) * 100 << "\n";
                     }
                 }
             }
 
             // recurse on other BBs
             for (BasicBlock* succBB : successors(BB)) {
-                updateBrProb(succBB, hazardBlocks);
+                updateBrProb(succBB, hazardBlocks, finalPath, li);
             }
 
         }
 
         PreservedAnalyses run(Function& F, FunctionAnalysisManager& FAM) {
-            // llvm::Timer timer;
-            // timer.startTimer();
-
             llvm::PostDominatorTreeAnalysis::Result& PDT = FAM.getResult<PostDominatorTreeAnalysis>(F);
             llvm::LoopAnalysis::Result &li = FAM.getResult<LoopAnalysis>(F);
 
@@ -449,26 +452,57 @@ namespace {
             pathSelection(BB, SuperBlockBB, finalPath, PDT, li);
 
             // update branch probabilities
-            updateBrProb(BB, PDT);
+            // updateBrProb(BB, hazardBlocks, finalPath, li);
 
-            errs() << "size of hazardBlocks " << hazardBlocks.size() << "\n";
-            errs() << "size of finalPath " << finalPath.size() << "\n";
-            for (auto block : finalPath) {
-                block->printAsOperand(errs(), false);
-                errs() << "\n";
+
+            for (BasicBlock &BB : F) {
+                for (Instruction &I : BB) {
+                    int pathHeuristicCount = 0;
+                    if (auto* BI = dyn_cast<BranchInst>(&I)) {
+                        if (BI->isConditional()){
+                            BasicBlock *thenBlock = BI->getSuccessor(0);
+                            BasicBlock *elseBlock = BI->getSuccessor(1);
+
+                            if (hazardBlocks.find(thenBlock) != hazardBlocks.end() && hazardBlocks.find(elseBlock) == hazardBlocks.end()) {
+                                pathHeuristicCount = 15;
+                            } else if (hazardBlocks.find(elseBlock) != hazardBlocks.end() && hazardBlocks.find(thenBlock) == hazardBlocks.end()) {
+                                pathHeuristicCount = 0;
+                            } else {
+                                pathHeuristicCount += opcodeHeuristic(BI);
+                                pathHeuristicCount += pointerHeuristic(BI);
+                                pathHeuristicCount += branchDirectionHeuristic(BI);
+                                pathHeuristicCount += guardHeuristic(BI);
+                                pathHeuristicCount += loopHeuristic(BI, li);
+                            }
+
+                            // setting new weights based on heuristics
+                            // llvm::MDBuilder MDB(Builder.getContext());
+                            // llvm::MDNode* Weights = MDB.createBranchWeights(pathHeuristicCount / 15 * 100, (1 - pathHeuristicCount) / 15 * 100);
+                            // BI->setMetadata(llvm::LLVMContext::MD_prof, Weights);
+
+                            errs() << "Branch weights for block: ";
+                            BB.printAsOperand(errs(), false);
+                            errs() << "\nThen Block: ";
+                            thenBlock->printAsOperand(errs(), false);
+                            errs() << ", Weight: " << " " << (pathHeuristicCount / 15.0) * 100 << "\n";
+                            errs() << "Else Block: ";
+                            elseBlock->printAsOperand(errs(), false);
+                            errs() << ", Weight: " << " " << (1 - (pathHeuristicCount / 15.0)) * 100 << "\n";
+                        }
+                    }
+                }
             }
-            // std::cout << "size of superBlockBB " << SuperBlockBB.size() << std::endl;
 
-            // timer.stopTimer();
-            // llvm::TimeRecord totalTime = timer.getTotalTime();
-            
-            // std::ofstream outputFile;
-            // outputFile.open("../staticOutput.txt", std::ios::out | std::ios::app);
-            
-            // outputFile << std::fixed << std::setprecision(20);
-            // outputFile << totalTime.getWallTime() << "\n";
-            // outputFile.close();
-
+            // errs() << "size of hazardBlocks " << hazardBlocks.size() << "\n";
+            // for (auto block : hazardBlocks  ) {
+            //     block->printAsOperand(errs(), false);
+            //     errs() << "\n";
+            // } 
+            // errs() << "size of finalPath " << finalPath.size() << "\n";
+            // for (auto block : finalPath) {
+            //     block->printAsOperand(errs(), false);
+            //     errs() << "\n";
+            // }
             return PreservedAnalyses::all();
         }
     };
