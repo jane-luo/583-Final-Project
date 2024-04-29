@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TEST="automotive/qsort/qsort_large"
+TEST="test"
 
 cd "build"
 make

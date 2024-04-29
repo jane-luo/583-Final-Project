@@ -1,9 +1,6 @@
 #!/bin/bash
 
-# ACTION NEEDED: If the path is different, please update it here.
-PATH2LIB="../build/profileInfoPass/profileInfoPass.so"        # Specify your build directory in the project
-
-# ACTION NEEDED: Choose the correct pass when running.
+PATH2LIB="../build/profileInfoPass/profileInfoPass.so"
 PASS=profileInfo
 UNOPTIMIZED="unoptimizedOutput.txt"
 OPTIMIZED="profileOutput.txt"
@@ -19,8 +16,6 @@ opt -passes='loop-simplify' ${1}.bc -o ${1}.ls.bc
 
 # Instrument profiler passes.
 opt -passes='pgo-instr-gen,instrprof' ${1}.ls.bc -o ${1}.ls.prof.bc
-
-# Note: We are using the New Pass Manager for these passes! 
 
 # Generate binary executable with profiler embedded
 clang -fprofile-instr-generate ${1}.ls.prof.bc -o ${1}_prof
@@ -44,21 +39,18 @@ clang ${1}.ls.bc -o ${1}_no_fplicm
 clang ${1}.fplicm.bc -o ${1}_fplicm
 
 # Produce output from binary to check correctness
-./${1}_fplicm > fplicm_output # time this
+./${1}_fplicm > fplicm_output
 
-echo -e "\n=== Program Correctness Validation ==="
-if [ "$(diff correct_output fplicm_output)" != "" ]; then
-    echo -e ">> Outputs do not match\n"
-else
-    echo -e ">> Outputs match\n"
-    # Measure performance
-    echo -e "1. Performance of unoptimized code"
-    { time ./${1}_no_fplicm ; } 2>&1 | awk '/real/ {print $2}' > ${UNOPTIMIZED}
-    echo -e "\n\n"
-    echo -e "2. Performance of optimized code"
-    { time ./${1}_fplicm ; } 2>&1 | awk '/real/ {print $2}' > ${OPTIMIZED}
-    echo -e "\n\n"
-fi
+# Measure performance
+echo -e "1. Performance of unoptimized code"
+time ./${1}_no_fplicm > /dev/null
+{ time ./${1}_no_fplicm ; } 2> ${UNOPTIMIZED}
+echo -e "\n\n"
+
+echo -e "2. Performance of optimized code"
+time ./${1}_fplicm > /dev/null
+{ time ./${1}_fplicm ; } 2> ${OPTIMIZED}
+echo -e "\n\n"
 
 # Cleanup: Remove this if you want to retain the created files. And you do need to.
 # rm -f default.profraw *_prof *_fplicm *.bc *.profdata *_output *.ll

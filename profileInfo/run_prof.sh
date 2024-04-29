@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Ensure LLVM tools are in your PATH
-PATH2LIB="../../llvm-project/build/lib/ProfInfoPass.so"
-PASS=profinfo
+PATH2LIB="../../llvm-project/build/lib/profileInfoPass.so"
+PASS=profileInfo
 
 # Define your program's source and executable names
 SOURCE="your_program.c"

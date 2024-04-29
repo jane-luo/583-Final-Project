@@ -20,8 +20,8 @@ struct profileInfoPass : public PassInfoMixin<profileInfoPass> {
     // llvm::Timer timer;
     // timer.startTimer();
 
-    // auto &bfi = FAM.getResult<BlockFrequencyAnalysis>(F);
-    // auto &bpi = FAM.getResult<BranchProbabilityAnalysis>(F);
+    auto &bfi = FAM.getResult<BlockFrequencyAnalysis>(F);
+    auto &bpi = FAM.getResult<BranchProbabilityAnalysis>(F);
 
     errs() << "Most frequent basic blocks in function: " << F.getName() << "\n";
 
