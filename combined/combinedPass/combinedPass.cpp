@@ -408,7 +408,7 @@ namespace {
 
                         // setting new weights based on heuristics
                         llvm::MDBuilder MDB(Builder.getContext());
-                        llvm::MDNode* Weights = MDB.createBranchWeights(pathHeuristicCount * 20, (1 - pathHeuristicCount) * 20);
+                        llvm::MDNode* Weights = MDB.createBranchWeights(pathHeuristicCount / 15 * 100, (1 - pathHeuristicCount) / 15 * 100);
                         BI->setMetadata(llvm::LLVMContext::MD_prof, Weights);
                     }
                 }
