@@ -410,6 +410,15 @@ namespace {
                         llvm::MDBuilder MDB(Builder.getContext());
                         llvm::MDNode* Weights = MDB.createBranchWeights(pathHeuristicCount / 15 * 100, (1 - pathHeuristicCount) / 15 * 100);
                         BI->setMetadata(llvm::LLVMContext::MD_prof, Weights);
+
+                        errs() << "Branch weights for block: ";
+                        BB->printAsOperand(errs(), false);
+                        errs() << "\nThen Block: ";
+                        thenBlock->printAsOperand(errs(), false);
+                        errs() << ", Weight: " << pathHeuristicCount / 15 * 100 << "\n";
+                        errs() << "Else Block: ";
+                        elseBlock->printAsOperand(errs(), false);
+                        errs() << ", Weight: " << (1 - pathHeuristicCount) / 15 * 100 << "\n";
                     }
                 }
             }
