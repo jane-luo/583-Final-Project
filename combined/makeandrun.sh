@@ -1,12 +1,14 @@
 #!/bin/bash
 
+TEST="test"
+
 cd "build"
 make
 
 cd "../benchmarks"
-sh run.sh eCalculate
+sh run.sh ${TEST}
 
-# sh viz.sh test
-# sh viz.sh test.superblocks
+sh viz.sh ${TEST}
+sh viz.sh ${TEST}.static
 
-# rm -f default.profraw *_prof *_superblocks *.bc *.profdata *_output *.ll
+# rm -f default.profraw *_prof *_fplicm *.bc *.profdata *_output *.ll
