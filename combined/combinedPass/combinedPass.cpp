@@ -145,6 +145,57 @@ namespace {
             }
         }
 
+        
+        int pointerHeuristic(BranchInst* BI) {
+            // Ensure the branch is conditional
+            if (!BI || !BI->isConditional())
+                return 0;
+
+            Value* cond = BI->getCondition();
+            
+            // Check if the condition is an integer comparison instruction
+            if (ICmpInst* icmp = dyn_cast<ICmpInst>(cond)) {
+                // Check if operands are pointers
+                Value* lhs = icmp->getOperand(0);
+                Value* rhs = icmp->getOperand(1);
+                if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
+                    // Apply heuristic based on comparison type
+                    switch (icmp->getPredicate()) {
+                        case ICmpInst::ICMP_EQ:
+                            // Pointers are not expected to be equal, so return 0
+                            return 0;
+                        case ICmpInst::ICMP_NE:
+                            // Pointers are expected to be not equal, so return 1
+                            return 5;  // Encode as '1' indicating more likely
+                        default:
+                            // For other pointer comparisons, default to a neutral expectation
+                            return 0;
+                    }
+                }
+            }
+            return 0;
+        }
+        
+        int loopHeuristic(BranchInst* BI, llvm::LoopAnalysis::Result &li) {
+            int then = 0;
+            int el = 0;
+            if (BI->getNumSuccessors() == 2){
+                if (li.getLoopFor(BI->getSuccessor(0))){
+                    then++;
+                }
+                if (li.getLoopFor(BI->getSuccessor(1))){
+                    el++;
+                }
+            }
+            if (then > el){
+                return 4;
+            } 
+            if (then < el){
+                return 0;
+            }
+            return -1;
+        }
+
         int opcodeHeuristic(BranchInst* BI) {
             if (!BI || !BI->isConditional()) return 0;
 
@@ -181,33 +232,38 @@ namespace {
                 }
             }
 
-            return 1;  // Default to more likely for all other conditions
+            return 3;  // Default to more likely for all other conditions
         }
 
-        int pointerHeuristic(BranchInst* BI) {
+        int guardHeuristic(BranchInst* BI) {
             // Ensure the branch is conditional
             if (!BI || !BI->isConditional())
                 return 0;
 
             Value* cond = BI->getCondition();
-            
-            // Check if the condition is an integer comparison instruction
+
+            // Check if comparison instruction
             if (ICmpInst* icmp = dyn_cast<ICmpInst>(cond)) {
-                // Check if operands are pointers
                 Value* lhs = icmp->getOperand(0);
                 Value* rhs = icmp->getOperand(1);
-                if (lhs->getType()->isPointerTy() && rhs->getType()->isPointerTy()) {
-                    // Apply heuristic based on comparison type
-                    switch (icmp->getPredicate()) {
-                        case ICmpInst::ICMP_EQ:
-                            // Pointers are not expected to be equal, so return 0
-                            return 0;
-                        case ICmpInst::ICMP_NE:
-                            // Pointers are expected to be not equal, so return 1
-                            return 1;  // Encode as '1' indicating more likely
-                        default:
-                            // For other pointer comparisons, default to a neutral expectation
-                            return 0;
+
+                // Detecting if one of the operands is used immediately after the branch
+                for (auto user : lhs->users()) {
+                    if (Instruction* inst = dyn_cast<Instruction>(user)) {
+                        // binaryop and load (dereference) require LHS to be valid
+                        if (inst->isBinaryOp() || isa<LoadInst>(inst)) {
+                            // Check if the branch likely guards the use of LHS
+                            switch (icmp->getPredicate()) {
+                                case ICmpInst::ICMP_EQ:
+                                    // Expecting the condition to be false to use LHS
+                                    return 2;
+                                case ICmpInst::ICMP_NE:
+                                    // Expecting the condition to be true to use LHS
+                                    return 0;
+                                default:
+                                    return 0;
+                            }
+                        }
                     }
                 }
             }
@@ -236,61 +292,6 @@ namespace {
             }
             
             return 0;
-        }
-
-        int guardHeuristic(BranchInst* BI) {
-            // Ensure the branch is conditional
-            if (!BI || !BI->isConditional())
-                return 0;
-
-            Value* cond = BI->getCondition();
-
-            // Check if comparison instruction
-            if (ICmpInst* icmp = dyn_cast<ICmpInst>(cond)) {
-                Value* lhs = icmp->getOperand(0);
-                Value* rhs = icmp->getOperand(1);
-
-                // Detecting if one of the operands is used immediately after the branch
-                for (auto user : lhs->users()) {
-                    if (Instruction* inst = dyn_cast<Instruction>(user)) {
-                        // binaryop and load (dereference) require LHS to be valid
-                        if (inst->isBinaryOp() || isa<LoadInst>(inst)) {
-                            // Check if the branch likely guards the use of LHS
-                            switch (icmp->getPredicate()) {
-                                case ICmpInst::ICMP_EQ:
-                                    // Expecting the condition to be false to use LHS
-                                    return 1;
-                                case ICmpInst::ICMP_NE:
-                                    // Expecting the condition to be true to use LHS
-                                    return 0;
-                                default:
-                                    return 0;
-                            }
-                        }
-                    }
-                }
-            }
-            return 0;
-        }
-
-        int loopHeuristic(BranchInst* BI, llvm::LoopAnalysis::Result &li) {
-            int then = 0;
-            int el = 0;
-            if (BI->getNumSuccessors() == 2){
-                if (li.getLoopFor(BI->getSuccessor(0))){
-                    then++;
-                }
-                if (li.getLoopFor(BI->getSuccessor(1))){
-                    el++;
-                }
-            }
-            if (then > el){
-                return 1;
-            } 
-            if (then < el){
-                return 0;
-            }
-            return -1;
         }
 
 
@@ -356,7 +357,7 @@ namespace {
                         pathHeuristicCount += loopHeuristic(BI, li);
 
                         // keeping finalPath just in case
-                        if (pathHeuristicCount > 2){
+                        if (pathHeuristicCount >= 6){
                             errs() << "choosing likely path to ThenBlock.\n";
                             // finalPath.push_back(thenBlock);
                             finalPath.insert(thenBlock);
