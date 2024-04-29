@@ -308,6 +308,7 @@ namespace {
             // finalPath.push_back(BB);
             finalPath.insert(BB);
 
+
             for (Instruction& I : *BB) {
                 if (auto* BI = dyn_cast<BranchInst>(&I)) {
                     if (BI->isConditional()){
@@ -392,7 +393,7 @@ namespace {
             }
         }
 
-        void updateBrProb(BasicBlock* BB, std::unordered_set<BasicBlock*>& hazardBlocks, std::set<BasicBlock*>& finalPath, llvm::LoopAnalysis::Result &li){
+        void updateBrProb(Function &F, BasicBlock* BB, std::unordered_set<BasicBlock*>& hazardBlocks, std::set<BasicBlock*>& finalPath, llvm::LoopAnalysis::Result &li){
             if (!BB) return;
             if (hazardBlocks.find(BB) != hazardBlocks.end()) return;
 
@@ -413,9 +414,10 @@ namespace {
                         pathHeuristicCount += loopHeuristic(BI, li);
 
                         // setting new weights based on heuristics
-                        // llvm::MDBuilder MDB(Builder.getContext());
-                        // llvm::MDNode* Weights = MDB.createBranchWeights(pathHeuristicCount / 15 * 100, (1 - pathHeuristicCount) / 15 * 100);
-                        // BI->setMetadata(llvm::LLVMContext::MD_prof, Weights);
+                        LLVMContext &Context = F.getContext();
+                        MDBuilder MDB(Context);
+                        llvm::MDNode* Weights = MDB.createBranchWeights(pathHeuristicCount / 15.0 * 100, (1 - (pathHeuristicCount / 15.0)) * 100);
+                        BI->setMetadata(llvm::LLVMContext::MD_prof, Weights);
 
                         errs() << "Branch weights for block: ";
                         BB->printAsOperand(errs(), false);
@@ -431,7 +433,7 @@ namespace {
 
             // recurse on other BBs
             for (BasicBlock* succBB : successors(BB)) {
-                updateBrProb(succBB, hazardBlocks, finalPath, li);
+                updateBrProb(F, succBB, hazardBlocks, finalPath, li);
             }
 
         }
@@ -452,7 +454,7 @@ namespace {
             pathSelection(BB, SuperBlockBB, finalPath, PDT, li);
 
             // update branch probabilities
-            updateBrProb(BB, hazardBlocks, finalPath, li);
+            updateBrProb(F, BB, hazardBlocks, finalPath, li);
 
 
             // for (BasicBlock &BB : F) {

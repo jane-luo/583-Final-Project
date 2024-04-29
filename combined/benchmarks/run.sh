@@ -27,33 +27,41 @@ clang ${1}.static.bc -o ${1}_with_static_metadata
 ./${1}_with_static_metadata > static_metadata_output
 
 # Measure performance
+# echo -e "1. Performance of code without optimization"
+# { time ./${1}_no_optimization ; } 2> ${UNOPTIMIZED}
+# echo -e "\n\n"
+
+# echo -e "2. Performance of code with static analyzer metadata"
+# { time ./${1}_with_static_metadata ; } 2> ${OPTIMIZED}
+# echo -e "\n\n"
+
 echo -e "1. Performance of code without optimization"
-{ time ./${1}_no_optimization ; } 2> ${UNOPTIMIZED}
+{ time ./${1}_no_optimization ; } > /dev/null
 echo -e "\n\n"
 
 echo -e "2. Performance of code with static analyzer metadata"
-{ time ./${1}_with_static_metadata ; } 2> ${OPTIMIZED}
+{ time ./${1}_with_static_metadata ; } > /dev/null
 echo -e "\n\n"
 
-#!/bin/bash
+# #!/bin/bash
 
-PATH2LIB="../build/combinedPass/combinedPass.so"
-PASS="combined"
+# PATH2LIB="../build/combinedPass/combinedPass.so"
+# PASS="combined"
 
-# Delete outputs from previous runs.
-# rm -f *.bc *.dot .*.dot
+# # Delete outputs from previous runs.
+# # rm -f *.bc *.dot .*.dot
 
-# Convert source code to bitcode (IR).
-clang -emit-llvm -c ${1}.c -Xclang -disable-O0-optnone -o ${1}.bc
+# # Convert source code to bitcode (IR).
+# clang -emit-llvm -c ${1}.c -Xclang -disable-O0-optnone -o ${1}.bc
 
-# Canonicalize natural loops (Ref: llvm.org/doxygen/LoopSimplify_8h_source.html)
-opt -passes='loop-simplify' ${1}.bc -o ${1}.ls.bc
+# # Canonicalize natural loops (Ref: llvm.org/doxygen/LoopSimplify_8h_source.html)
+# opt -passes='loop-simplify' ${1}.bc -o ${1}.ls.bc
 
-# Run the pass
-opt -disable-output -load-pass-plugin="${PATH2LIB}" -passes="${PASS}" ${1}.bc
+# # Run the pass
+# opt -disable-output -load-pass-plugin="${PATH2LIB}" -passes="${PASS}" ${1}.bc
 
-# Generate CFG visualizations
-opt -disable-output -passes="dot-cfg" ${1}.bc
-cat .main.dot | dot -Tpdf > dot/main.pdf
+# # Generate CFG visualizations
+# opt -disable-output -passes="dot-cfg" ${1}.bc
+# cat .main.dot | dot -Tpdf > dot/main.pdf
 
-# rm -f *.bc *.dot .*.dot
+# # rm -f *.bc *.dot .*.dot

@@ -4,7 +4,7 @@ cd "build"
 make
 
 cd "../benchmarks"
-sh run.sh test
+sh run.sh eCalculate
 
 # sh viz.sh test
 # sh viz.sh test.superblocks
