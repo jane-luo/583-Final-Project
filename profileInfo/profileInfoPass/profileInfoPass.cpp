@@ -5,11 +5,11 @@
 #include "llvm/Analysis/BranchProbabilityInfo.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/Timer.h"
+// #include "llvm/Support/Timer.h"
 
 #include <iostream>
-#include <fstream>
-#include <iomanip>
+// #include <fstream>
+// #include <iomanip>
 
 using namespace llvm;
 
@@ -17,11 +17,11 @@ namespace {
 
 struct profileInfoPass : public PassInfoMixin<profileInfoPass> {
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
-    llvm::Timer timer;
-    timer.startTimer();
+    // llvm::Timer timer;
+    // timer.startTimer();
 
-    auto &bfi = FAM.getResult<BlockFrequencyAnalysis>(F);
-    auto &bpi = FAM.getResult<BranchProbabilityAnalysis>(F);
+    // auto &bfi = FAM.getResult<BlockFrequencyAnalysis>(F);
+    // auto &bpi = FAM.getResult<BranchProbabilityAnalysis>(F);
 
     errs() << "Most frequent basic blocks in function: " << F.getName() << "\n";
 
@@ -30,15 +30,15 @@ struct profileInfoPass : public PassInfoMixin<profileInfoPass> {
       errs() << "BB Name: " << BB.getName() << ", Frequency: " << blockFreq << "\n";
     }
 
-    timer.stopTimer();
-    llvm::TimeRecord totalTime = timer.getTotalTime();
+    // timer.stopTimer();
+    // llvm::TimeRecord totalTime = timer.getTotalTime();
     
-    std::ofstream outputFile;
-    outputFile.open("../profileOutput.txt", std::ios::out | std::ios::app);
+    // std::ofstream outputFile;
+    // outputFile.open("../profileOutput.txt", std::ios::out | std::ios::app);
     
-    outputFile << std::fixed << std::setprecision(20);
-    outputFile << totalTime.getWallTime() << "\n";
-    outputFile.close();
+    // outputFile << std::fixed << std::setprecision(20);
+    // outputFile << totalTime.getWallTime() << "\n";
+    // outputFile.close();
 
     return PreservedAnalyses::all();
   }
